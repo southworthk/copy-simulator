@@ -9,6 +9,8 @@ public class App
 {
     private static Random rand = new Random();
     private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd HH:mm:ss");
+    private static final int ABANDONMENT_THRESHOLD = 100; // set to 75
+    private static final int TRIAL_STATUS_THRESHOLD = 100000000; //every 100 million trials
 
     static StringBuilder original;
     static StringBuilder copySeq;
@@ -32,7 +34,7 @@ public class App
         System.out.println( "target amino acid sequence: "+translateNSeq( original ));
         System.out.println( "copied amino acid sequence: "+translateNSeq( copySeq ));
         System.out.println("similarity of amino acid sequences: "+calculateSimilarity(original,copySeq)+"%");
-        simulate(324000000L); // 3 billion for overnight (3000000000L) - 5.4 billion for the weekend - 324 million (324000000L) for lunch hour, 324 million/hour
+        simulate(1000000000000L); // 1000000000000L 3 billion for overnight (2000000000L) - 5.4 billion for the weekend - 324 million (324000000L) for lunch hour, 324 million/hour
     }
 
     private static void simulate(long trials){
@@ -42,53 +44,57 @@ public class App
         StringBuilder originalCopy = copySeq;
         double totalAvgSimilarity = 0.0;
         double maxSimilarity = 0.0;
+        int counter = 0;
 
        for (int i = 0; i < trials; i++)
        {
            int generation = 1;
-           int counter = 0;
            while (true)
            {
                mutate(copySeq, copySeqLen);
                if (copySeq.equals(original))
                {
                    // record statistics
-                   //System.out.println("MATCH!!!");
+                   System.out.println("MATCH!!!");
                    matches++;
                    break;
                }
-               else if (generation > 75)
+               else if (generation > ABANDONMENT_THRESHOLD) // abandon trial if it hasn't found a match by a certain point
                {
-
                    double similarity = calculateSimilarity(original, copySeq);
                    maxSimilarity = (similarity > maxSimilarity) ? similarity : maxSimilarity;
                    totalAvgSimilarity = (totalAvgSimilarity + similarity);
-                   // System.out.println("mutated copy - trial " + i + ":   " + translateNSeq(copySeq) + " - similarity: " + similarity + "%");
+                   //System.out.println("mutated copy - trial " + i + ":   " + translateNSeq(copySeq) + " - similarity: " + similarity + "%");
                    copySeq = originalCopy;
+                   generation = 0;
+                   counter++;
                    break;
                }
                else
                {
                    generation++;
-                   counter++;
-               }
-
-               if(counter > 100000000) // every 100 million iterations, print status
-               {
-                   Date date = new Date();
-                   System.out.println("Trials completed: "+(generation/1000000)+" million, "+sdf.format(new Timestamp((date.getTime()))));
-                   counter = 0;
                }
            }
-       }
-       long endTime = System.currentTimeMillis();
-       float duration = (endTime - startTime) / 1000; // elapsed seconds
+           if(counter > TRIAL_STATUS_THRESHOLD) // print status update
+           {
+               printStatus(startTime, matches, i, totalAvgSimilarity, maxSimilarity);
+               counter = 1;
+           }
 
-       System.out.println("Total matches: "+matches);
-       System.out.println("Average similarity of amino acid sequences at abandonment: "+(totalAvgSimilarity/(trials))+"% ");
-       System.out.println("Maximum similarity of amino acid sequences at abandonment: "+maxSimilarity+"% ");
-       System.out.println("Total trials: "+trials);
-       System.out.println("Elapsed time: "+duration+" seconds");
+       }
+       // print final status
+       printStatus(startTime, matches, trials, totalAvgSimilarity, maxSimilarity);
+
+    }
+
+    private static void printStatus(long startTime, int matches, long trials, double totalAvgSimilarity, double maxSimilarity){
+        long endTime = System.currentTimeMillis();
+        float duration = (endTime - startTime) / 1000; // elapsed seconds
+
+        System.out.println("**********************************************************************");
+        System.out.println("Completed trials: "+(trials/TRIAL_STATUS_THRESHOLD)+" hundred million, total matches: "+matches+", elapsed time: "+duration+" seconds");
+        System.out.printf("Similarity of AA seq at abandonment, avg: %.2f%%, max: %.2f%% %n",(totalAvgSimilarity/(trials)),maxSimilarity);
+
     }
 
     private static StringBuilder createDifferentSequence(StringBuilder target, int pctDiff)
@@ -209,15 +215,32 @@ public class App
         return randomNucleotide;
     }
 
+    /**
+     * Returns a StringBuilder object that corresponds to the translation
+     * of the source argument. The translation is the amino acid equivalent
+     * of the nucleotide source.
+     *
+     * @param source a string that corresponds to a ribonucleic acid (RNA) sequence
+     * @return       a string that corresponds to the translation of the source
+     *               to a sequence of amino acid residues
+     */
     private static StringBuilder translateNSeq(StringBuilder source)
     {
 
+        // instantiate new StringBuilder object to hold the translated string
         StringBuilder translation = new StringBuilder();
+
+        // calculate the length of the source sequence
         int len = source.length();
 
+        // translate the source sequence three characters at a time
         for( int i = 0; i < len; i+=3 )
         {
+            // get the next three nucleotide symbols in the sequence
             String codon = source.substring(i,i+3);
+
+            // if the string is exactly three symbols in length
+            // translate it and add to the translation StringBuilder object
             if (codon.length() == 3)
             {
                 translation.append(translateNtoA(codon));
